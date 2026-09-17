@@ -14,6 +14,10 @@ supported_model_families:
   - gemma4-unified
   - dense                 # plain transformer GGUFs (e.g. VibeThinker-3B, Qwen2 dense — no MTP)
   - deepseek4-moe         # DeepSeek-V4-Flash-0731 (arch deepseek4, 43 all-MoE layers, MLA+DSA) — CPU-offload slugs
+  - qwen4exp              # Qwen3.8-Flash-Next (125B MoE / 6B active) — arch merged into the
+                           # b10675 base via ggml-org/llama.cpp#27742; this file's pin is b10920,
+                           # so the family is loadable on the existing digest (no new profile, no
+                           # pin bump — gate M9: a new profile would be correct only if the image changed)
 features: {}
 supported_kv_formats:
   - fp16                  # llama.cpp default when no -ctk/-ctv is passed (DeepSeek-Flash offload slugs)

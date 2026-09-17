@@ -1,7 +1,7 @@
 schema_version: 1
 id: qwen3.8-flash-next
 display_name: Qwen3.8-Flash-Next (MoE, Qwen)
-description: Qwen3.8-Flash-Next — sparse MoE (512 routed experts top-10 + 1 shared) on a 1:3 hybrid where only every 4th block grows KV, plus a 51.2B-address hashed n-gram PLE; served by CPU expert offload on the club3090 moe-cache engine at 205K with vision.
+description: Qwen3.8-Flash-Next — sparse MoE (512 routed experts top-10 + 1 shared) on a 1:3 hybrid where only every 4th block grows KV, plus a 51.2B-address hashed n-gram PLE; served by CPU expert offload on the club3090 moe-cache engine at 205K with vision, or on stock llama.cpp via the AtomicChat AD quants (n-gram table paged from SSD) at the native 262K.
 family: qwen4exp
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ num_attn_heads: 24               # qwen4exp.attention.head_count
 num_kv_heads: 2                  # qwen4exp.attention.head_count_kv — plain GQA, NO MLA
 head_dim_attn: 256               # attention.key_length == attention.value_length == 256
 attention_k_eq_v: true           # 256 == 256
-max_ctx_supported: 262144        # qwen4exp.context_length — we SHIP 204800, see weights note
+max_ctx_supported: 262144        # qwen4exp.context_length — the AtomicChat slugs ship this natively (cheap KV); the Unsloth slug ships 204800 (its in-shard table pool collapses at 262144, see its note)
 
 # MoE
 num_experts: 512                 # qwen4exp.expert_count
@@ -34,10 +34,10 @@ num_experts_per_tok: 10          # qwen4exp.expert_used_count
 moe_intermediate_size: 640       # qwen4exp.expert_feed_forward_length
 shared_expert_intermediate_size: 640   # qwen4exp.expert_shared_feed_forward_length
 
-# ⛔ NO MTP HEAD. `qwen4exp.nextn_predict_layers` is ABSENT from this GGUF (verified,
-# not assumed). Engine support for one is an OPEN DRAFT PR (ggml-org/llama.cpp#27836);
-# a 4.14 GB Q8_0 head shard + graft script exists (jlkivey/...-MTP-PR27836-GGUF) but
-# neither is wired here. Do not set this key speculatively.
+# ⛔ NO MTP HEAD IN THE UNSLOTH GGUF. `qwen4exp.nextn_predict_layers` is ABSENT from it (verified,
+# not assumed). The AtomicChat builds DO carry the 4B MTP head, but engine support is an
+# OPEN DRAFT PR (ggml-org/llama.cpp#27836) either way, so neither slug enables speculative
+# decoding. Do not set this key speculatively.
 mtp_num_hidden_layers: 0
 vision_capable: true             # mmproj-F16.gguf, clip.projector_type = qwen3vl_merger — validated 4/4 2026-08-29
 
@@ -79,6 +79,10 @@ requires_genesis: false
 #                                                    total = 9,435 slots
 # ⚠️ A device holds MULTIPLE pools (3 on CUDA0, 4 on CUDA1) and the slots must be
 # SUMMED. Reading one pool's `used=N/N` as the device total under-reports badly.
+#
+# The ATOMICCHAT slugs do not use this machinery at all: their n-gram table is a
+# separate mmap'd shard (SSD-backed) and the experts simply follow llama.cpp's
+# natural -ngl layer split, so no pools, no -ot, no --no-mmap.
 # ---------------------------------------------------------------------------
 
 weights:
@@ -100,6 +104,67 @@ weights:
     # ⚠️ REQUIRED on every GGUF entry — the default `*.safetensors` matches NOTHING.
     verify_glob: "UD-Q4_K_XL/*.gguf"
     manual_note: "🧪 EXPERIMENTAL — the `qwen4exp` architecture reached mainline via ggml-org/llama.cpp#27742 (merged 6c84c7d5) and is in the engine's b10675 base — it is NO LONGER a vendored delta, though stock llama.cpp OLDER than b10675 still cannot load it. Served via `llamacpp-club3090-v1.5`. Ships 204800, NOT the 262144 the model declares: 262144 also boots but the expert pool COLLAPSES to 802/1,026 MiB (~95% loss) — a paper ceiling, do not ship it. ⭐ Fastest model on this stack as of 2026-08-29 (39.28 narr / 38.57 code canonical) and the reason is expert byte-size, not quant. ⚠️ `--no-mmap` is REQUIRED (pins the offloaded set); the older claim that it corrupts this model was pre-`ce8743a05` and is INVALID. ⚠️ QUALITY UNTESTED — no 8-pack has been run."
+  # ---------------------------------------------------------------------------
+  # AtomicChat builds (community contribution) — stock llama.cpp, no fork.
+  #
+  # The 51.2B-address n-gram PLE table is its OWN shard in these builds, which
+  # pages from the NVMe under mmap (the model reads ~2.7 KB/token from it).
+  # That is the entire difference that matters:
+  #   Unsloth UD-Q4_K_XL  → 105 GB must be RESIDENT (in-shard table, --no-mmap)
+  #   AtomicChat AD-Q4_K_M → 54.5 GB in fast memory + 38.4 GB table on SSD
+  # Fidelity is the publisher's own measurement: KL 0.0842 / top-1 89.49% vs
+  # the Q5_K_M build's 0.0837 / 89.55% — "within measurement error", and it is
+  # the publisher's recommended default ("the one to take"). The IQ4_XS build
+  # (45.8 GB fast, KL 0.2277 / 82.68%) is their 64 GB-box tier and is NOT cataloged.
+  # The 4B MTP head IS in these checkpoints (absent from the Unsloth one) but
+  # stays inert until ggml-org/llama.cpp#27836 lands.
+  # ---------------------------------------------------------------------------
+  atomicchat-ad-q4km:
+    path: qwen3.8-flash-next-gguf-ac/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64
+    local_subdir: qwen3.8-flash-next-gguf-ac
+    size_gb: 96            # 94.5 GB across 33 shards (shard 2 is the 38.4 GB table) + the mmproj below
+    format: gguf
+    status: experimental
+    hf_repo: AtomicChat/Qwen3.8-Flash-Next-GGUF
+    shards: 33
+    # Same `--local-dir` bucket rule as above: local_subdir is the BUCKET,
+    # files: carries the quant-folder prefix.
+    files:
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00001-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00002-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00003-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00004-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00005-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00006-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00007-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00008-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00009-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00010-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00011-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00012-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00013-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00014-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00015-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00016-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00017-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00018-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00019-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00020-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00021-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00022-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00023-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00024-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00025-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00026-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00027-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00028-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00029-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00030-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00031-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00032-of-00033.gguf
+      - Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00033-of-00033.gguf
+    verify_glob: "Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/*.gguf"
+    manual_note: "🐣 community contribution — stock llama.cpp (the shared llama-cpp-local pin, b10920 ≥ the b10675 base where qwen4exp merged). The 38.4 GB n-gram table is shard 2 and stays SSD-paged under mmap — do NOT add --no-mmap (the Unsloth-specific pin; it would force all 94.5 GB resident); `-fit off` IS required (auto-fit mis-sizes this arch). Needs ~54.5 GB of fast memory + the table on a fast NVMe; publisher floor 24 GB GPU + 96 GB+ RAM. QUALITY UNTESTED family-wide — no 8-pack has run on this model on any engine."
   mmproj-f16:
     path: qwen3.8-flash-next-gguf/mmproj
     # ⚠️ REPO-ROOT artifact (sits beside the quant DIRECTORIES, not inside one), so
@@ -114,7 +179,20 @@ weights:
       - mmproj-F16.gguf
     verify_glob: "*.gguf"
     manual_note: "Vision projector. ⚠️ `clip.projector_type = qwen3vl_merger` -> PROJECTOR_TYPE_QWEN3VL: there is NO PROJECTOR_TYPE_QWEN4EXP, vision works by REUSING the Qwen3VL path, so a future change there affects this model. Declares 27 deepstack layers. Validated 4/4 on ground truth 2026-08-29, both with the projector on CUDA0 and (since the default flip) on the HOST. ⭐ Shipped `-mmdev none`: the encoder costs ~1,114 MiB on CUDA0 and is allocated AFTER the moe-cache pool is sized, so nothing budgets for it — on-GPU placement left only 830 MiB headroom with a drafter active, a latent OOM on the first image request. Host placement costs ZERO cache slots."
-
+  mmproj-f16-ac:
+    path: qwen3.8-flash-next-gguf-ac/mmproj
+    # REPO-ROOT artifact (beside the quant directory), landing flat in its
+    # local_subdir — same shape as the Unsloth mmproj entry.
+    local_subdir: qwen3.8-flash-next-gguf-ac/mmproj
+    size_gb: 1
+    format: gguf
+    status: experimental
+    hf_repo: AtomicChat/Qwen3.8-Flash-Next-GGUF
+    kind: mmproj
+    files:
+      - mmproj-Qwen3.8-Flash-Next-F16.gguf
+    verify_glob: "*.gguf"
+    manual_note: "Vision projector for the AtomicChat builds (shared across all three of their quants). Same qwen3vl_merger projector family as the Unsloth one. The repo root also ships a BF16 variant (mmproj-Qwen3.8-Flash-Next-BF16.gguf); F16 is the catalog choice, matching the Unsloth side."
 default_weight_variant: unsloth-ud-q4kxl
 
 # ---------------------------------------------------------------------------
@@ -124,7 +202,15 @@ default_weight_variant: unsloth-ud-q4kxl
 #                  projector by default, so WITH_VISION=1 is effectively REQUIRED
 #                  for a vision-capable boot; the entrypoint degrades to text-only
 #                  rather than dying when the file is absent.
+#   weights_aliases / alias_extras: the `gguf-ac` alias selects the AtomicChat
+#                  AD-Q4_K_M build (its mmproj rides along as the extra). The
+#                  default primary stays the Unsloth build — this alias is an
+#                  alternate fetch, not a replacement.
 # ---------------------------------------------------------------------------
 setup:
   primary: unsloth-ud-q4kxl
   vision: mmproj-f16
+  weights_aliases:
+    gguf-ac: atomicchat-ad-q4km
+  alias_extras:
+    gguf-ac: [mmproj-f16-ac]

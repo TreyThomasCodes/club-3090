@@ -2702,6 +2702,55 @@ entries:
         presence_penalty: 0.0
         repetition_penalty: 1.0
     sampler_default_mode: instruct
+  llamacpp/qwen38-flash-next-dual-ad-q4km:
+    origin: core
+    model: qwen3.8-flash-next
+    weights_variant: atomicchat-ad-q4km
+    workload: long-ctx-single
+    engine: llama-cpp-local
+    drafter: null
+    spec_method: null
+    kv_format: fp16
+    act_format: 16bit
+    act8_capable: false
+    offload: null
+    moe_cache: false
+    host_ram_gb: 96
+    chat_template: native
+    tp: 2
+    max_ctx: 262144
+    max_num_seqs: 1
+    mem_util: null
+    compose_path: models/qwen3.8-flash-next/llama-cpp/compose/dual/atomicchat-ad-q4km/base.yml
+    requires_nvlink: false
+    requires_homogeneous_arch: false
+    required_engine_features: []
+    default_port: 8122
+    kvcalc_key: SKIP
+    status: incubating
+    status_note: "🐣 Community contribution (AtomicChat build). Boots on STOCK llama.cpp (shared llama-cpp-local pin, b10920) — no fork, no vendored overlay. The 38.4 GB n-gram PLE table is its own shard and pages from the NVMe under mmap, so the residency floor is ~54.5 GB of fast memory (publisher-measured) with the table on a fast NVMe — the publisher's stated floor is 24 GB GPU + 96 GB+ RAM; the Unsloth sibling (105 GB resident) cannot boot on such a box at all. Ships the NATIVE 262K context: the Unsloth build's 204800 ceiling was its in-shard-table moe-cache POOL collapsing at 262K, a trap this layout does not have (KV is fp16, ~25 KB/token, ~6.5 GB at the full window). fp16 KV (the engine default — hence base.yml), -ts 1,1, -ngl 99 natural split, -fit off REQUIRED, mmap ON by design (the opposite of the sibling's --no-mmap). No drafter: the 4B MTP head IS in this build but mainline qwen4exp-MTP support is the open draft PR ggml-org/llama.cpp#27836. Coexists with the 27B ultrafast tier on a dual-3090 + 128 GB box (both at full native ctx). QUALITY UNTESTED family-wide — no 8-pack has run on this model on any engine; promote to 🧪 after verify-full + bench on the validating rig, and only to ⚠️/✅ with the 8-pack (both reasoning modes) behind it."
+    weights_companions:
+      - mmproj-f16-ac
+    gateway: false
+    serve_aliases: []
+    required_sm: null
+    category: frontier
+    sampler_profiles:
+      instruct:
+        temperature: 0.7
+        top_p: 0.8
+        top_k: 20
+        min_p: 0.0
+        presence_penalty: 1.5
+        repetition_penalty: 1.0
+      thinking:
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 20
+        min_p: 0.0
+        presence_penalty: 0.0
+        repetition_penalty: 1.0
+    sampler_default_mode: instruct
   llamacpp-club3090/deepseek-flash-multi4-q8-moecache:
     origin: core
     model: deepseek-v4-flash-0731

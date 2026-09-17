@@ -1,0 +1,265 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     Qwen3.8-Flash-Next (AtomicChat AD-4.27bpw Q4_K_M GGUF — 94.5 GB
+#              in 33 shards; 125B MoE, 6B active per token)
+#   Engine:    llama.cpp mainline — the shared `llama-cpp-local` pin
+#              (ghcr digest of build b10920, >= the b10675 base where qwen4exp
+#              merged upstream, ggml-org/llama.cpp#27742). NO fork, NO vendored
+#              overlay: this build is designed to run on stock llama.cpp, which
+#              is exactly the point of it.
+#   Topology:  Dual 3090 (-sm layer -ts 1,1, -ngl 99: each layer's tensors go
+#              to a card while they fit, the rest to RAM — the publisher's
+#              own 24 GB-GPU configuration)
+#   Drafter:   none — the 4B MTP head IS in this GGUF (the Unsloth one is not)
+#              but mainline qwen4exp-MTP support is still the OPEN DRAFT PR
+#              ggml-org#27836, so the head is inert here. The club3090
+#              sibling's ngram-mod measurement (+64% repeated context) was made
+#              on the fork — UNVERIFIED on this pin, so it ships OFF.
+#   KV:        fp16 — the engine default (no -ctk/-ctv). 25 KB/token on this
+#              architecture, so the full 262K window is ~6.5 GB: a tenth of
+#              what the 27B tier spends on the same window.
+#   Vision:    yes (mmproj-Qwen3.8-Flash-Next-F16, shared across the repo's
+#              quants; encoder on the host by default — -mmdev none)
+#   Max ctx:   262144 — native. There is no pool-collapse trap here: that was
+#              the Unsloth build's moe-cache POOL collapsing when its 105 GB
+#              in-shard table demanded 262K. Here the 51B PLE table is its own
+#              shard paging from the NVMe, so 262K is just 6.5 GB of KV.
+#   Genesis:   N/A — llama.cpp engine; Genesis is vLLM/Qwen3-Next-specific
+#   Status:    🐣 Incubating
+#   Caveats:   quality UNTESTED family-wide — no 8-pack has run on
+#              qwen3.8-flash-next on any engine yet. The quant's fidelity
+#              numbers are the publisher's own (KL 0.0842 / top-1 89.49% —
+#              "within measurement error" of the Q5_K_M build's 0.0837 /
+#              89.55%, at 17.6 GB less; their recommended default). Needs
+#              ~54.5 GB of FAST memory (VRAM+RAM combined) with the 38.4 GB
+#              table shard on a fast NVMe; the publisher's stated floor is
+#              24 GB GPU + 96 GB+ RAM — a box class on which the 105 GB
+#              Unsloth sibling cannot boot at all. No drafter on this engine.
+#              Promote to 🧪 after a clean boot + verify-full + bench on the
+#              validating rig; to ⚠️/✅ only after the full gate (the model's
+#              8-pack, in both reasoning modes, is part of that).
+#   Best for:  the 125B-capacity tier running ALONGSIDE the 27B tier: with
+#              the 27B ultrafast at 0.90 (43 GiB VRAM) the split lands ~9 GB
+#              VRAM / ~45 GB RAM — both models at full native ctx at once.
+# ---------------------------------------------------------------------------
+# Qwen3.8-Flash-Next on STOCK llama.cpp — dual 3090, AtomicChat AD-Q4_K_M.
+#
+# Sibling composes for this model:
+#
+#   | Slug                                                     | Card(s) | Weights      | KV   | Max ctx | Engine               |
+#   |----------------------------------------------------------|---------|--------------|------|---------|----------------------|
+#   | llamacpp-club3090/qwen38-flash-next-dual-q4kxl-moecache | 2x 3090 | UD-Q4_K_XL   | q8_0 | 204800  | club3090 v1.6 fork  |
+#   | llamacpp/qwen38-flash-next-dual-ad-q4km  ← THIS FILE    | 2x 3090 | AD-Q4_K_M    | fp16 | 262144  | mainline b10920     |
+#
+# WHY STOCK llama.cpp (the differentiator vs the sibling):
+#
+#   The Unsloth build keeps the 51B n-gram PLE table INSIDE the weight shards,
+#   so the whole 105 GB file must be resident (~110-117 GB; its `--no-mmap`
+#   pins exactly that). The AtomicChat builds split the table into its own
+#   shard (shard 2, 38.4 GB here) that PAGES from the NVMe: the model reads
+#   ~2.7 KB from it per token, ≈3 MB/s of random reads at 36 tok/s — a
+#   fraction of what any drive sustains. Consequences:
+#
+#     * in-fast-memory is 54.5 GB, not 94.5+ (publisher-measured, Q4_K_M)
+#     * a 24 GB GPU + 96 GB+ RAM machine runs it (the publisher's floor)
+#     * it coexists with the 27B ultrafast tier on a dual-3090 + 128 GB box
+#       WITHOUT touching the 27B's 0.90 / 262K configuration
+#
+#   And the two flags that are "required" for the sibling are the two flags
+#   this compose deliberately does NOT carry:
+#
+#     * NO `--no-mmap` — mmap is what pages the table from the NVMe. Forcing
+#       it resident pins 94.5 GB and defeats the entire residency design.
+#     * `-fit off` — llama.cpp's auto-fitting mis-sizes this architecture
+#       (the publisher's hard requirement: "if it does not fit, it does not
+#       fit smaller").
+#
+# RESIDENCY (publisher-measured sizes; the GPU/RAM split is dynamic):
+#
+#   weights in fast memory ......... 54.5 GB  (125B main + 4B MTP head, 4.27 bpw)
+#   table shard (mmap, NVMe) ....... 38.4 GB  (hot rows page in, stay resident)
+#   KV at the full 262K ............. ~6.5 GB  (25 KB/token; 36 of 48 layers
+#                                                      are GDN with fixed state)
+#   => ~61-68 GB fast memory standalone (17 layers/card on the 3090s when the
+#      27B is stopped); with the 27B tier resident (~45 GB RAM / ~9 GB VRAM).
+#
+#   DECODE is RAM-bandwidth-bound — only the 6B active params are read per
+#   token. The publisher's only measured datapoint is 36 tok/s on a 64 GB
+#   M5 Max laptop; expect the low-to-mid-20s..30s class on an 8-core
+#   26 GB/s host. This is the capacity tier, not the speed tier: the point is
+#   125B-class knowledge (DeepSWE 58.7 vs 42.2 for the 27B; Toolathlon
+#   73.5 vs 67.1 in the publisher's table) at 262K context, not TPS.
+#
+#   LAUNCH (direct compose — the same path the sibling was validated on;
+#   launcher discovery via switch.sh/launch.sh needs the registry entry that
+#   ships with the catalog PR, so until it merges this is run by file):
+#
+#     hf download AtomicChat/Qwen3.8-Flash-Next-GGUF \
+#        --include "Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/*" \
+#        --include "mmproj-*" --local-dir <models-cache>/qwen3.8-flash-next-gguf-ac
+#     MODEL_DIR=<models-cache> PORT=8122 docker compose -f <this file> up -d
+# ===========================================================================
+
+services:
+  llama-cpp-qwen38-flash-next-ac:
+    # The shared mainline pin (digest, not rolling tag — the #187 rule).
+    # b10920 >= b10675, the base in which qwen4exp merged (ggml-org#27742),
+    # so this architecture loads stock. A newer pin: LLAMACPP_IMAGE=...
+    image: ${LLAMACPP_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:6ac921528d613deb0fd142c654735e594a446a1c37a069eeab08d8fd974d4bec}
+    container_name: "${ESTATE_CONTAINER:-llama-cpp-qwen38-flash-next-ac}"
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    # Reap orphaned children: a wedged llama-server becomes a <defunct> PID 1
+    # child that docker cannot kill, holding its RAM. (House habit, all engines.)
+    init: true
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8122}}:8080"
+    volumes:
+      # 6 levels up = repo root (compose/dual/<quant>/<serving>.yml depth).
+      # test-compose-mounts-resolve covers it.
+      - "${MODEL_DIR:-../../../../../../models-cache}:/models:ro"
+    environment:
+      # Docker forwards ONLY what is declared here; the entrypoint evaluates
+      # the row INSIDE the container. Bare form for the sampler/thinking vars
+      # (${VAR:-} would forward empty and defeat the entrypoint fallbacks).
+      - THREADS
+      - INSTRUCT
+      - THINKING
+      - REASONING
+      - TEMP
+      - TEMPERATURE
+      - TOP_P
+      - PRESENCE_PENALTY
+      - CUDA_VISIBLE_DEVICES=${ESTATE_GPUS:-${CUDA_VISIBLE_DEVICES:-0,1}}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${ESTATE_GPUS:-0,1}']
+              capabilities: [gpu]
+    # The image ENTRYPOINT is ["/app/llama-server"] on every engine we ship
+    # (mainline included — verified). This wrapper is equivalent to it plus
+    # the row/toggles, resolving each sampler flag exactly ONCE so a mode
+    # switch can never serve a blend of rows (the b10236 last-wins warning is
+    # what made that pattern unsafe).
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        # -- Threads -----------------------------------------------------------
+        # llama.cpp's own default collapses CPU-offload decode (-31% measured
+        # on this workload family), and a fixed compose default cannot be right
+        # on two different rigs. THREADS wins if set; else nproc/2 — the same
+        # FLOOR the launcher computes (scripts/lib/compose-meta.sh
+        # resolve_offload_threads), so the two paths agree. nproc/2 is a floor,
+        # not the optimum: the good zone is an ABSOLUTE ~24-32; pin one in
+        # .env if the box has the cores (the 32c reference host measured ~20%
+        # faster at 28 than at 16).
+        if [ -n "$${THREADS:-}" ]; then
+          export LLAMA_ARG_THREADS="$${THREADS}"
+          echo "[threads] -t $${LLAMA_ARG_THREADS} (THREADS set explicitly)" >&2
+        else
+          _np=$$(nproc 2>/dev/null || echo 8)
+          _half=$$(( _np / 2 )); [ "$$_half" -lt 1 ] && _half=1
+          export LLAMA_ARG_THREADS="$$_half"
+          echo "[threads] -t $${LLAMA_ARG_THREADS} (auto = nproc/2, nproc=$$_np; set THREADS to tune)" >&2
+        fi
+
+        # -- Sampler row: resolved ONCE, appended ONCE -------------------------
+        # The card publishes TWO rows; they live in the registry as
+        # `sampler_profiles` and are DERIVED here (test-compose-sampler-profiles
+        # enforces this file's defaults == the instruct row).
+        # THIS COMPOSE SHIPS INSTRUCT as the default, matching the sibling:
+        # the template would otherwise default enable_thinking=true AND
+        # reasoning_effort=xhigh, which is very expensive for serving.
+        # THINKING=1 selects the thinking row. Explicit TEMP/TOP_P/PRESENCE_PENALTY
+        # win in both branches.
+        if [ -n "$${THINKING:-}" ] && [ "$${THINKING}" != "0" ]; then
+          _reason="$${REASONING:-on}"
+          _temp="$${TEMP:-$${TEMPERATURE:-1.0}}"
+          _topp="$${TOP_P:-0.95}"
+          _pres="$${PRESENCE_PENALTY:-0.0}"
+          echo "[sampler] thinking row (THINKING=$${THINKING}): temp=$$_temp top_p=$$_topp presence=$$_pres" >&2
+        else
+          _reason="$${REASONING:-off}"
+          _temp="$${TEMP:-$${TEMPERATURE:-0.7}}"
+          _topp="$${TOP_P:-0.80}"
+          _pres="$${PRESENCE_PENALTY:-1.5}"
+          echo "[sampler] instruct row (default): temp=$$_temp top_p=$$_topp presence=$$_pres" >&2
+        fi
+        ROW=(--reasoning "$$_reason" --temp "$$_temp" --top-p "$$_topp" --presence-penalty "$$_pres")
+        # NOTE: no drafter flags anywhere in this compose. The 4B MTP head is
+        # in the GGUF but mainline qwen4exp-MTP support is the open draft PR
+        # ggml-org/llama.cpp#27836 — a --spec-type draft-mtp here would not
+        # bind to a working path. ngram-mod exists in the fork, not this pin,
+        # so its +64% measurement does NOT carry over (unverified here).
+        exec /app/llama-server "$@" "$${ROW[@]}"
+      - --
+    command:
+      - '-m'
+      # Shard 1 of 33. The 38.4 GB table lives in shard 2 and PAGES from the
+      # mount — do not point this at any other shard.
+      - '/models/${GGUF_FILE:-qwen3.8-flash-next-gguf-ac/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64/Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00001-of-00033.gguf}'
+      - '--host'
+      - '0.0.0.0'
+      - '--port'
+      - '8080'
+      - '--alias'
+      - '${SERVED_NAME:-qwen3.8-flash-next}'
+      # One slot by default: -np N splits -c into ctx/N per slot, changing the
+      # KV budget and the split — a concurrency A/B must re-measure, not reuse
+      # single-stream rows.
+      - '-np'
+      - '${NPARALLEL:-1}'
+      # Native 262K. Cheap here (6.5 GB of fp16 KV) — and this is the
+      # architecture's declared window, so the full value is what ships.
+      - '-c'
+      - '${CTX:-262144}'
+      - '-b'
+      - '${UBATCH:-4096}'
+      - '-ub'
+      - '${UBATCH:-4096}'
+      # -ngl 99 + -sm layer + -ts 1,1: the natural split. Every layer whose
+      # tensors (including its 512 experts, ~1.3 GB at Q4_K_M) fit on a card
+      # stays there; the rest go to RAM, where the OS pages hot tensors from
+      # the NVMe-backed mmap. With the 27B tier resident (~21.5 GiB/card in
+      # use) only ~2 layers/card land on GPU; standalone, ~17/card.
+      - '-ngl'
+      - '99'
+      - '-sm'
+      - 'layer'
+      - '-ts'
+      - '1,1'
+      # ⭐⭐ REQUIRED — auto-fit mis-sizes this architecture (publisher's hard
+      # requirement). The sibling ships the same flag for the same reason.
+      - '--fit'
+      - 'off'
+      # ⭐ mmap stays ON: it is what pages the table shard from the NVMe.
+      # The sibling's --no-mmap is the Unsloth-specific answer to its in-shard
+      # table and is the OPPOSITE of what this build needs.
+      # fp16 KV = the engine default: no -ctk/-ctv anywhere in this compose.
+      # (This is why the file is base.yml — name only non-default KV.)
+      - '--cache-prompt'
+      # -- Vision (mmproj) ------------------------------------------------------
+      # The repo-root F16 projector, shared across all three AtomicChat quants.
+      # MMPROJ_DEVICE: `none` (default) = encoder in host RAM; its cost is paid
+      # only on image requests. Do NOT point it at a card that is close to
+      # full (with the 27B tier resident, ~3 GiB/card) — the encoder is ~1 GB
+      # and would leave no headroom for the first image request.
+      - '--mmproj'
+      - '${MMPROJ:-/models/qwen3.8-flash-next-gguf-ac/mmproj-Qwen3.8-Flash-Next-F16.gguf}'
+      - '-mmdev'
+      - '${MMPROJ_DEVICE:-none}'
+      # Mode-invariant sampler tail (instruct and thinking rows agree on these).
+      - '--top-k'
+      - '${TOP_K:-20}'
+      - '--min-p'
+      - '${MIN_P:-0.0}'
+      - '--repeat-penalty'
+      - '${REPEAT_PENALTY:-1.0}'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 40
+      start_period: 900s
