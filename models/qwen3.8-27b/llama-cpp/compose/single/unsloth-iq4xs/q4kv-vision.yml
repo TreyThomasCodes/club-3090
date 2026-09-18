@@ -44,6 +44,9 @@
 # 2026-08-20: "max everything on one card").
 #
 #   Dual-card sibling slug: llamacpp/qwen38-27b-dual-q8kxl (2x 3090, q8_0, 262144).
+#   | Other dual sibling                         | KV   | Context | Status     |
+#   | llamacpp/qwen38-27b-dual-davidau-q6k-mtp     | q8_0 | 32768   | Incubating |
+#   DavidAU is a modified coding checkpoint (Q6_K + MTP), text-only, unvalidated.
 #
 # SERVING-GRADE q8_0 KV (131K) stays reachable — override the KV + ctx on THIS
 # compose:  KV_TYPE=q8_0 CTX_SIZE=131072  (gives q8@131K; the F16 projector stays

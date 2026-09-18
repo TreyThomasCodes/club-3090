@@ -68,6 +68,20 @@ kv_calc_supported: true
 #                     (see the qwen3.6-27b gguf_mmproj_f16 entry for the shape).
 vision_capable: true
 weights:
+  davidau-neo-coder-q6k:
+    path: qwen3.8-27b-gguf/davidau-neo-coder-q6k
+    local_subdir: qwen3.8-27b-gguf/davidau-neo-coder-q6k
+    size_gb: 24.04
+    format: gguf
+    status: experimental
+    hf_repo: DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF
+    revision: c02caef111a8acf987947f35e1e288aa5450e184
+    files:
+      - Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf
+    engine: llama-cpp
+    kind: gguf
+    verify_glob: "*.gguf"
+    manual_note: "DavidAU NEO-CODER-MAX Q6_K MTP (apache-2.0), a modified checkpoint, not a base-Qwen quant. Selected artifact: 24,033,703,456 bytes (22.38 GiB); SHA256 ac011aabe685edbdf542e49351eb6c76c0e5531408f2507f2235ab10931e23a5 from HF LFS metadata. Header/tensor-table inspected: qwen35, block_count=65, nextn_predict_layers=1, blk.64.nextn.* present. Native template supports tools and thinking control. Structural MTP compatibility only: not booted, no acceptance or quality measured. Text-only compose; no projector companion. Fetch explicitly with WEIGHT_KEY=qwen3.8-27b:davidau-neo-coder-q6k; existing defaults unchanged."
   unsloth-iq4xs:
     path: qwen3.8-27b-gguf/unsloth-iq4xs
     local_subdir: qwen3.8-27b-gguf/unsloth-iq4xs

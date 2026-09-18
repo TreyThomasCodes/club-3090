@@ -1,0 +1,141 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     Qwen3.8-27B DavidAU NEO-CODER-MAX (Q6_K, embedded MTP)
+#   Topology:  Dual GPU (layer split, 2x RTX 3090 target; NVLink optional)
+#   Drafter:   MTP n=2 (unvalidated on this checkpoint)
+#   KV:        q8_0
+#   Vision:    no (no projector mounted)
+#   Max ctx:   32768 (initial validation target; not a measured ceiling)
+#   Genesis:   none
+#   Status:    🐣 Incubating
+#   Caveats:   Not booted; MTP acceptance, quality, VRAM and throughput unmeasured.
+#   Best for:  Evaluating a coding-tuned 27B against the base model
+# ---------------------------------------------------------------------------
+# Sibling tiers (not interchangeable checkpoints):
+#   | Quant / serving                  | GPUs | Context | Purpose                |
+#   | unsloth-iq4xs/q4kv-vision.yml     | 1    | 262K    | Base Qwen, vision     |
+#   | unsloth-q8kxl/q8kv.yml            | 2    | 262K    | Base Qwen, Q8 fidelity |
+#   | davidau-neo-coder-q6k/q8-mtp.yml   | 2    | 32K     | Modified coding target |
+#
+# Publisher: https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF
+# Exact artifact inspected at c02caef111a8acf987947f35e1e288aa5450e184:
+#   24,033,703,456 bytes = 24.03 GB / 22.38 GiB (FILE size, not runtime VRAM).
+#   general.architecture=qwen35; block_count=65; nextn_predict_layers=1;
+#   blk.64.nextn.{eh_proj,enorm,hnorm,shared_head_norm}.weight present.
+# The stock llama-cpp-local pin provides draft-mtp for qwen35; tensor presence
+# establishes structural compatibility, NOT usable acceptance or a speed claim.
+# MTP implementation tracking: docs/UPSTREAM.md (llama.cpp Qwen MTP row).
+# No external DFlash drafter, custom image, or template override is needed.
+#
+# This is a fine-tuned/merged/abliterated checkpoint, NOT just base Qwen at Q6.
+# Do not transfer the base model's quality scores or vLLM DFlash2 TPS here.
+# Full GPU offload is the initial plan; --fit off prevents silent auto-fitting.
+# Measure per-card peaks before increasing context. Layer split uses no tensor
+# all-reduce and does not assume PCIe-only hardware or disable NVLink.
+# mmap stays enabled. Run as a time-sliced workload, not alongside Flash-Next
+# or the resident vLLM 27B. Normal switch/launch tears down managed services.
+#
+# Embedded template + --jinja handles tools. Default: thinking ON, effort low;
+# INSTRUCT=1 switches reasoning OFF and the sampler together. Publisher rows:
+# thinking 1.0/0.95/20/0.0, presence 0; instruct 0.7/0.8/20/0.0, presence 1.5.
+# Repeat penalty is 1.0. Explicit request sampler fields override defaults.
+# REASONING_EFFORT supports low/medium/xhigh. Test both modes independently.
+# SPEC_N sets draft depth; SPEC_N=0 or SPEC=off removes draft flags for an A/B.
+# CTX_SIZE/BATCH_SIZE/UBATCH_SIZE/TENSOR_SPLIT tune memory and prefill; NP=1.
+# No serving-quality claim until verify-full/stress, bench (per-card VRAM),
+# soak and behavioral quality gates have run on the actual compose.
+#
+# Download (only the selected MTP Q6_K file, not the whole multi-quant repo):
+#   WEIGHT_KEY=qwen3.8-27b:davidau-neo-coder-q6k bash scripts/setup.sh qwen3.8-27b
+# Launch ONLY when ready to replace the current managed server:
+#   bash scripts/launch.sh --variant llamacpp/qwen38-27b-dual-davidau-q6k-mtp --force
+# Default endpoint: :8160, served alias: qwen3.8-27b-davidau-neo-coder.
+# ===========================================================================
+
+services:
+  llama-cpp-qwen38-davidau-dual:
+    image: ${LLAMACPP_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:6ac921528d613deb0fd142c654735e594a446a1c37a069eeab08d8fd974d4bec}
+    container_name: "${ESTATE_CONTAINER:-llama-cpp-qwen38-davidau-dual}"
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8160}}:8080"
+    volumes:
+      - "${MODEL_DIR:-../../../../../../models-cache}:/models:ro"
+    environment:
+      - SPEC_N=${SPEC_N:-}
+      - SPEC=${SPEC:-}
+      - INSTRUCT
+      - THINKING
+      - REASONING
+      - TEMP
+      - TEMPERATURE
+      - TOP_P
+      - PRESENCE_PENALTY
+      - LLAMA_ARG_CHAT_TEMPLATE_KWARGS=${LLAMA_ARG_CHAT_TEMPLATE_KWARGS:-{"reasoning_effort":"${REASONING_EFFORT:-low}"}}
+      - CUDA_VISIBLE_DEVICES=${ESTATE_GPUS:-${CUDA_VISIBLE_DEVICES:-0,1}}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        if [ -n "$${INSTRUCT:-}" ]; then
+          _r="$${REASONING:-off}"; _t="$${TEMP:-$${TEMPERATURE:-0.7}}"
+          _p="$${TOP_P:-0.80}";    _pp="$${PRESENCE_PENALTY:-1.5}"
+          echo "[sampler] INSTRUCT row: reasoning=$$_r temp=$$_t top_p=$$_p presence=$$_pp" >&2
+        else
+          _r="$${REASONING:-on}";  _t="$${TEMP:-$${TEMPERATURE:-1.0}}"
+          _p="$${TOP_P:-0.95}";    _pp="$${PRESENCE_PENALTY:-0.0}"
+          echo "[sampler] THINKING row (default): reasoning=$$_r temp=$$_t top_p=$$_p presence=$$_pp" >&2
+        fi
+        ROW=(--reasoning "$$_r" --temp "$$_t" --top-p "$$_p" --presence-penalty "$$_pp")
+        _spec_n="$${SPEC_N:-2}"
+        case "$${SPEC:-}" in off|OFF|Off|false|no|0) _spec_n=0 ;; esac
+        case "$$_spec_n" in ""|*[!0-9]*)
+          echo "[spec] SPEC_N='$$_spec_n' is not a non-negative integer." >&2
+          echo "[spec] Fix: SPEC_N=<n> sets depth; SPEC_N=0 (or SPEC=off) disables." >&2
+          exit 1 ;;
+        esac
+        if [ "$$_spec_n" -gt 0 ]; then
+          echo "[spec] drafter ON (SPEC_N=$$_spec_n)" >&2
+          exec /app/llama-server "$$@" "$${ROW[@]}"
+        fi
+        ARGS=(); _skip=0
+        for _a in "$$@"; do
+          if [ "$$_skip" = 1 ]; then _skip=0; continue; fi
+          case "$$_a" in
+            --spec-type|--spec-draft-model|--spec-draft-n-max|--spec-draft-n-min|-md|--model-draft) _skip=1; continue ;;
+          esac
+          ARGS+=("$$_a")
+        done
+        echo "[spec] drafter OFF (SPEC_N=0 / SPEC=off) - drafter flags removed" >&2
+        exec /app/llama-server "$${ARGS[@]}" "$${ROW[@]}"
+      - --
+    command: >-
+      --host 0.0.0.0
+      --port 8080
+      -m /models/${GGUF_FILE:-qwen3.8-27b-gguf/davidau-neo-coder-q6k/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf}
+      --alias ${SERVED_NAME:-qwen3.8-27b-davidau-neo-coder}
+      -c ${CTX_SIZE:-32768}
+      -b ${BATCH_SIZE:-2048}
+      -ub ${UBATCH_SIZE:-512}
+      -ngl 99
+      --fit off
+      -sm ${SPLIT_MODE:-layer}
+      -ts ${TENSOR_SPLIT:-1,1}
+      -fa on
+      --cache-type-k ${KV_TYPE:-q8_0}
+      --cache-type-v ${KV_TYPE:-q8_0}
+      -np ${NP:-1}
+      --spec-type draft-mtp
+      --spec-draft-n-max ${SPEC_N:-2}
+      --jinja
+      --reasoning-format ${REASONING_FORMAT:-deepseek}
+      --top-k ${TOP_K:-20}
+      --min-p ${MIN_P:-0.0}
+      --repeat-penalty ${REPEAT_PENALTY:-1.0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

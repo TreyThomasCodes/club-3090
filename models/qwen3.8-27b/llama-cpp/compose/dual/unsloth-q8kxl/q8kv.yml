@@ -45,12 +45,13 @@
 #   Best for:  max-context + max-weight-fidelity Qwen3.8-27B on both 3090s.
 #              NOT yet recommendable for anything; see Caveats.
 # ---------------------------------------------------------------------------
-# Sibling composes for this model (both 🐣 Incubating, both text-only, both built-in MTP n=2):
+# Sibling composes for this model (see each file's current Status):
 #
 #   | Slug                                | Card(s) | Weights          | KV   | Max ctx | Notes                        |
 #   |-------------------------------------|---------|------------------|------|---------|------------------------------|
 #   | llamacpp/qwen38-27b-single-iq4xs    | 1x 3090 | UD-IQ4_XS 14.3G  | q8_0 | 131072  | fits one card                |
 #   | llamacpp/qwen38-27b-dual-q8kxl      | 2x 3090 | UD-Q8_K_XL 31.5G | q8_0 | 262144  | THIS file — max ctx + fidelity |
+#   | llamacpp/qwen38-27b-dual-davidau-q6k-mtp | 2x GPU | Q6_K 24.03G | q8_0 | 32768 | Modified coding model; incubating |
 #
 # Dual is not optional here: 31.5 GB of weights does not fit a 24 GB card. Both
 # cards are consumed. If you need one card free, use the single UD-IQ4_XS sibling.

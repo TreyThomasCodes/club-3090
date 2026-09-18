@@ -321,8 +321,9 @@ vllm_with = {k for k in with_profiles if k.startswith("vllm/")}
 check(len(vllm_with) >= 20,
       f"qwen3.8-27b vLLM entries expose sampler_profiles (got {len(vllm_with)})")
 check(llama_with == {"llamacpp/qwen38-27b-single-iq4xs",
-                     "llamacpp/qwen38-27b-dual-q8kxl"},
-      f"both llama.cpp qwen3.8 slugs gained sampler_profiles (got {sorted(llama_with)})")
+                     "llamacpp/qwen38-27b-dual-q8kxl",
+                     "llamacpp/qwen38-27b-dual-davidau-q6k-mtp"},
+      f"llama.cpp qwen3.8 slugs expose sampler_profiles (got {sorted(llama_with)})")
 check(all(k.split("/", 1)[1].startswith(("qwen38-27b-", "qwen38-flash-next-"))
           for k in with_profiles),
       "only qwen3.8-27b / qwen3.8-flash-next slugs carry sampler_profiles today")

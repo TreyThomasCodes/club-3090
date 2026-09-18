@@ -3332,6 +3332,52 @@ entries:
         presence_penalty: 0.0
         repetition_penalty: 1.0
     sampler_default_mode: thinking
+  llamacpp/qwen38-27b-dual-davidau-q6k-mtp:
+    origin: core
+    model: qwen3.8-27b
+    weights_variant: davidau-neo-coder-q6k
+    workload: fast-chat
+    engine: llama-cpp-local
+    drafter: qwen-mtp-builtin
+    spec_method: null
+    kv_format: q8_0
+    act_format: 16bit
+    act8_capable: false
+    offload: null
+    moe_cache: false
+    host_ram_gb: null
+    chat_template: native
+    tp: 2
+    max_ctx: 32768
+    max_num_seqs: 1
+    mem_util: null
+    compose_path: models/qwen3.8-27b/llama-cpp/compose/dual/davidau-neo-coder-q6k/q8-mtp.yml
+    requires_nvlink: false
+    requires_homogeneous_arch: false
+    required_engine_features: []
+    default_port: 8160
+    kvcalc_key: SKIP
+    status: incubating
+    status_note: "DavidAU NEO-CODER-MAX Q6_K embedded MTP, 24.03 GB file. Modified checkpoint, not base Qwen quality. Dual GPU layer split, q8_0 KV at 32K, MTP n=2, text-only. Header/tensor table confirms qwen35 + nextn head; runtime acceptance, VRAM, throughput and quality unvalidated. No production gates run. Use --force for standalone testing; does not replace curated defaults."
+    weights_companions: []
+    gateway: false
+    serve_aliases: []
+    sampler_profiles:
+      instruct:
+        temperature: 0.7
+        top_p: 0.8
+        top_k: 20
+        min_p: 0.0
+        presence_penalty: 1.5
+        repetition_penalty: 1.0
+      thinking:
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 20
+        min_p: 0.0
+        presence_penalty: 0.0
+        repetition_penalty: 1.0
+    sampler_default_mode: thinking
   sgl/qwen38-27b-dual-max:
     origin: core
     model: qwen3.8-27b
