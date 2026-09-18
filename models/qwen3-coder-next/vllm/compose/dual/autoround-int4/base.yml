@@ -5,24 +5,29 @@
 #   Drafter:   none
 #   KV:        bf16 (engine default with bfloat16 weights/activations)
 #   Vision:    no
-#   Max ctx:   16384 initially; architecture supports 262144
+#   Max ctx:   122880 at utilization 0.92; architecture supports 262144
 #   Genesis:   none
 #   Status:    🐣 Incubating
-#   Caveats:   Unbooted; dual-3090 fit, tool quality and throughput unvalidated.
+#   Caveats:   Requires router patch; verify-full reasoning check inapplicable (non-thinking); single-rig validation. See ../../../../INTERNALS.md.
+#   Quality:   toolcall-15 13/15 (87%) · instructfollow-15 12/15 (80%) · structoutput-15 15/15 (100%) · dataextract-15 10/15 (67%) · reasonmath-15 10/15 (67%) (--medium, thinking OFF, validity=valid, packs tc1.0.1·if1.0.0·so1.1.0·de1.2.0·rm1.0.0, 2026-09-18)
 #   Best for:  Initial all-GPU coding-agent evaluation, not production
 # ---------------------------------------------------------------------------
 # Only variant for this model: base.yml = TP=2, BF16 KV, no drafter/offload.
 # Source: https://huggingface.co/Intel/Qwen3-Coder-Next-int4-AutoRound
 # Card: https://huggingface.co/Qwen/Qwen3-Coder-Next
 # Weights alone are ~40.53 GiB across both cards. Runtime buffers, replicated
-# tensors and KV need additional VRAM: this is a fit experiment, NOT a fit claim.
-# Start at 16K / one sequence / 2048-token prefill chunks. CUDA graphs remain
-# enabled; diagnose actual boot memory before changing execution mode.
+# tensors and KV need additional VRAM. @TreyThomasCodes's dual-3090 NVLink rig passed
+# 182271-token retrieval and 178172 input + 4096 output at context 184320.
+# One sequence / 2048-token prefill chunks; CUDA graphs enabled. 196608 failed
+# KV allocation at utilization 0.95. Other rigs must establish their own fit.
 # Non-thinking model: no reasoning parser/effort switch or enable_thinking knob.
 # Use the checkpoint's own chat template. Official sampler: 1.0 / .95 / top-k 40.
 # No MTP, DFlash, W4A8 patches, CPU offload, or cross-model template reuse.
 # Time-slice with the existing server; launch/switch may stop managed services.
-# No benchmark or quality claims until the actual compose is validated.
+# Base measured: 157.39 narrative / 156.92 code tok/s at 250 W/card, no drafter.
+# Base stress PASS (1337 MB margin); continuous soak PASS. Earlier 0.95 capacity
+# experiment above failed the 1024 MB stress margin gate; not the base default.
+# BENCHMARKS.md and model INTERNALS.md record evidence and limitations.
 # ===========================================================================
 # Requires-min-vram-gb: 24
 # Engine-profile: vllm-stable
@@ -41,6 +46,7 @@ services:
       - ${MODEL_DIR:-../../../../../../models-cache}:/root/.cache/huggingface
       - ../../../cache/torch_compile:/root/.cache/vllm/torch_compile_cache
       - ../../../cache/triton:/root/.triton/cache
+      - ../../../patches/autoround-router:/etc/club3090/autoround-router:ro
       - ../../../../../../scripts/detect_nvlink.sh:/etc/club3090/detect_nvlink.sh:ro
     environment:
       - NVIDIA_VISIBLE_DEVICES=${ESTATE_GPUS:-${NVIDIA_VISIBLE_DEVICES:-all}}
@@ -67,6 +73,9 @@ services:
       - bash
       - -c
       - |
+        set -e
+        export PYTHONUTF8="${PYTHONUTF8:-1}"
+        python3 /etc/club3090/autoround-router/install.py
         source /etc/club3090/detect_nvlink.sh
         if [ "$${_CUSTOM_AR_ENABLED:-$${_NVLINK_ENABLED:-0}}" = "1" ]; then
           exec vllm serve "$$@"
@@ -90,9 +99,9 @@ services:
       - --tensor-parallel-size
       - "${TP:-2}"
       - --max-model-len
-      - "${MAX_MODEL_LEN:-16384}"
+      - "${MAX_MODEL_LEN:-122880}"
       - --gpu-memory-utilization
-      - "${GPU_MEMORY_UTILIZATION:-0.95}"
+      - "${GPU_MEMORY_UTILIZATION:-0.92}"
       - --max-num-seqs
       - "${MAX_NUM_SEQS:-1}"
       - --max-num-batched-tokens

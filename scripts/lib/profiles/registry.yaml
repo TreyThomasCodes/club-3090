@@ -1646,9 +1646,9 @@ entries:
     host_ram_gb: null
     chat_template: null
     tp: 2
-    max_ctx: 16384
+    max_ctx: 122880
     max_num_seqs: 1
-    mem_util: 0.95
+    mem_util: 0.92
     compose_path: models/qwen3-coder-next/vllm/compose/dual/autoround-int4/base.yml
     requires_nvlink: false
     requires_homogeneous_arch: false
@@ -1656,7 +1656,7 @@ entries:
     default_port: 8180
     kvcalc_key: "qwen3-coder-next:dual"
     status: incubating
-    status_note: "Intel AutoRound INT4; unbooted dual-3090 fit experiment at 16K. No calibrated VRAM/performance or quality claims. Non-thinking, text-only, no drafter/offload."
+    status_note: "Intel AutoRound INT4; requires vendored router fix (docs/UPSTREAM.md). @TreyThomasCodes dual-3090 NVLink, 250 W/card: 184320 context booted; 182271-token retrieval and 178172+4096 sustained generation passed. 196608 failed KV allocation at 0.95 utilization. Bench 157.60/157.12 narrative/code TPS. Base now 122880 at 0.92: stress PASS (1337 MB margin), continuous soak PASS, medium quality 60/75 valid thinking OFF, bench 157.39/156.92 TPS. Earlier 0.95 capacity run failed the VRAM-margin gate. verify-full has expected non-thinking reasoning-field failure. Other rigs unvalidated. Non-thinking, text-only, no drafter/offload."
     weights_companions: []
     gateway: false
     serve_aliases: []

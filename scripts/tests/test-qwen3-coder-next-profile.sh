@@ -16,7 +16,8 @@ assert (m.num_hidden_layers, m.num_gdn_layers, m.num_attn_layers) == (48, 36, 12
 assert (m.num_experts, m.num_experts_per_tok, m.num_kv_heads) == (512, 10, 2)
 assert not m.vision_capable and not m.compatible_drafters
 assert e['status'] == 'incubating' and e['drafter'] is None
-assert e['max_ctx'] == 16384 and e['default_port'] == 8180
+assert e['max_ctx'] == 122880 and e['default_port'] == 8180
+assert e['mem_util'] == 0.92
 assert not any(key[0] == m.id for key in DEFAULTS)
 w = m.weights[e['weights_variant']]
 assert w['revision'] == '79c8a6bb73b7946095d7ece1f8fc68535f7c9ab8'
@@ -33,5 +34,16 @@ assert '"temperature":${TEMP:-${TEMPERATURE:-1.0}}' in cmd[-1]
 calc = runpy.run_path('tools/kv-calc.py', run_name='coder_profile_test')
 spec = calc['MODEL_SPECS'][m.id]
 assert spec['num_attn_layers'] == 12 and spec['weights_total_gb'] == 43.52
-print('PASS: Coder-Next geometry, artifact, non-thinking compose and KV projection wiring')
+patch = runpy.run_path('models/qwen3-coder-next/vllm/patches/autoround-router/install.py')
+assert patch['patched'](patch['OLD']) == patch['NEW']
+assert patch['patched'](patch['NEW']) == patch['NEW']
+for source in ('unexpected upstream source', patch['OLD'] * 2):
+    try:
+        patch['patched'](source)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError('router drift must fail closed')
+assert 'python3 /etc/club3090/autoround-router/install.py' in service['entrypoint'][2]
+print('PASS: Coder-Next profile and router patch/idempotency/drift guards')
 PY

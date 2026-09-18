@@ -16,6 +16,36 @@ this quant" rationale live in `models/<model>/INTERNALS.md` (or the local
 
 ---
 
+## Qwen3-Coder-Next — TreyThomasCodes fork baseline
+
+2026-09-18, **incubating**, `vllm/qwen3-coder-next-dual-int4`.
+
+**Final base: context 122880, utilization .92**, same rig/weights/engine below:
+157.39 narrative / 156.92 code wall tok/s; prefill 8069.34 at 10K (n=3),
+3067.68 at 90K (n=1); sampled peak 22790 / 22786 MiB. Stress PASS with
+1337 MB headroom; continuous soak PASS (25 requests, zero growth/errors).
+Medium quality 60/75, thinking OFF, validity valid; verify-full's non-thinking
+reasoning-field failure remains disclosed. Evidence: rig-local
+`/tmp/coder-base-validation/{bench,quality,stress,soak}-092-120k.log`.
+
+**Earlier capacity baseline (not the final base defaults):**
+@TreyThomasCodes: 2× RTX 3090 with NVLink, PCIe gen4 x8, 121.5 GiB RAM,
+deliberate 250 W/card caps. Intel AutoRound INT4, vLLM v0.29.0 plus
+[router workaround](docs/UPSTREAM.md#vllm-vllm-projectvllm), BF16 KV, TP=2,
+no drafter/offload, context 184320, utilization .95, one sequence.
+
+| Narrative wall TPS | Code wall TPS | Short TTFT | 10K prefill | 90K prefill | Peak VRAM GPU0 / GPU1 |
+|---:|---:|---:|---:|---:|---:|
+| 157.60 | 157.12 | 83 ms | 8050 tok/s | 4864.67 tok/s | 23512 / 23508 MiB |
+
+Canonical sampler .6/.95/20/0; narrative/code 3 warm + 5 measured;
+10K prefill n=3, 90K n=1 (18.5 s TTFT). Engine-internal timing unavailable;
+TPS above is client wall time, not engine-log throughput.
+Near-limit retrieval and sustained generation passed; formal quality/stress/soak
+remain incomplete. Verify-full's only failure was the reasoning-field check on
+this non-thinking model. This is not a production qualification.
+[Details and rig-local evidence paths](models/qwen3-coder-next/INTERNALS.md).
+
 ## Canonical bench
 
 All `Narr / Code TPS` rows come from `bash scripts/bench.sh`, which runs:

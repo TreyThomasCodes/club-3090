@@ -11,6 +11,34 @@ schema_version: 1
 # all new tooling MUST read `delivery_mechanism`/`delivery_spec` instead. Do
 # not add new compose wiring decisions to the boolean block.
 patches:
+  - id: coder-next-autoround-router
+    model: [qwen3-coder-next]
+    files:
+      - models/qwen3-coder-next/vllm/patches/autoround-router/install.py
+    load_bearing_when:
+      - composes: [vllm/qwen3-coder-next-dual-int4]
+        reason: "Intel checkpoint contains quantized routers; stock loader creates unquantized routers."
+    delivery:
+      dockerfile_bake: false
+      entrypoint_invoke: true
+      genesis: false
+    delivery_gaps: []
+    delivery_mechanism: install_script
+    delivery_spec:
+      script: models/qwen3-coder-next/vllm/patches/autoround-router/install.py
+      mounted_at: /etc/club3090/autoround-router
+      invoke: python3 /etc/club3090/autoround-router/install.py
+      invoked_before: vllm-serve
+    drift_guard:
+      kind: boot
+      check: "Require vLLM 0.29.0 and exactly one original or patched router block; fail closed otherwise."
+    capability: quantized-router
+    foundational: false
+    upstream:
+      ref: vllm-project/vllm#35261
+      status: open
+      drop_when: "Pinned stock engine supports AutoRound routers and passes load/quality validation."
+    status: unverified
   - id: fa2-fp8kv-sm86
     model: [qwen3.8-27b]
     files:
