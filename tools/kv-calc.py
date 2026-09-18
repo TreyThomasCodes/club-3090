@@ -153,7 +153,12 @@ def _load_model_specs_from_yaml(profiles):
     # is normalized to zero by its ModelProfile because no mtp.* tensors ship.
     agentworld = profiles.models["qwen-agentworld-35b-a3b"]
     agentworld_spec = {"model_id": agentworld.id, "model_family": agentworld.family, **{k: getattr(agentworld, k) for k in qm_fields}, "valid_tp": list(agentworld.valid_tp), "weights_total_gb": _weight_size(agentworld, agentworld.default_weight_variant), "mamba_state_bytes": 4, "chunk_size": 256, "mtp_n_default": profiles.drafters["qwen-mtp-builtin"].n_default}
+    # Coder-Next: own 48-layer geometry and Intel INT4 footprint; projection
+    # uses the hybrid MoE formula, not a measured calibration for this model.
+    coder = profiles.models["qwen3-coder-next"]
+    coder_spec = {"model_id": coder.id, "model_family": coder.family, **{k: getattr(coder, k) for k in qm_fields}, "valid_tp": list(coder.valid_tp), "weights_total_gb": _weight_size(coder, coder.default_weight_variant), "mamba_state_bytes": 4, "chunk_size": 256, "mtp_n_default": 0}
     return {
+        "qwen3-coder-next": coder_spec,
         "qwen3.6-27b": qspec,
         "qwen3.8-27b": q38spec,
         "qwen3.6-35b-a3b": qmspec,
@@ -563,6 +568,7 @@ COMPOSE_ALIAS_TEXT = {
     "qwen3.6-27b": "minimal=vllm/minimal dual=vllm/dual nvfp4-single=vllm/qwen-27b-single-nvfp4 nvfp4-dual=vllm/qwen-27b-dual-nvfp4",
     "qwen3.8-27b": "dual-fast=vllm/qwen38-27b-dual-fast dual-superfast=vllm/qwen38-27b-dual-superfast dual-ultrafast=vllm/qwen38-27b-dual-ultrafast dual-max=vllm/qwen38-27b-dual-max dual-supermax=vllm/qwen38-27b-dual-supermax multi4-fast=vllm/qwen38-27b-multi4-fast multi4-superfast=vllm/qwen38-27b-multi4-superfast multi4-ultrafast=vllm/qwen38-27b-multi4-ultrafast multi4-max=vllm/qwen38-27b-multi4-max multi4-supermax=vllm/qwen38-27b-multi4-supermax multi4-ultramax=vllm/qwen38-27b-multi4-ultramax multi8-fast=vllm/qwen38-27b-multi8-fast multi8-superfast=vllm/qwen38-27b-multi8-superfast multi8-ultrafast=vllm/qwen38-27b-multi8-ultrafast multi8-max=vllm/qwen38-27b-multi8-max multi8-supermax=vllm/qwen38-27b-multi8-supermax multi8-ultramax=vllm/qwen38-27b-multi8-ultramax",
     "qwen3.6-35b-a3b": "qwen-a3b-preview-single=vllm/qwen-a3b-preview-single qwen-35b-a3b-dual=vllm/qwen-35b-a3b-dual nvfp4-single=vllm/qwen-35b-a3b-single-nvfp4 nvfp4-dual=vllm/qwen-35b-a3b-dual-nvfp4",
+    "qwen3-coder-next": "dual=vllm/qwen3-coder-next-dual-int4",
     "agents-a1": "agents-a1-dual=vllm/agents-a1-dual",
     "qwen-agentworld-35b-a3b": "dual=vllm/qwen-agentworld-35b-a3b-dual-awq-int4",
     "gemma-4-31b": "gemma-dual=vllm/gemma-bf16-mtp gemma-dual-int8=vllm/gemma-int8-mtp gemma-single=vllm/gemma-mtp-tp1",

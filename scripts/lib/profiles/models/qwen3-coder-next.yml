@@ -1,0 +1,51 @@
+schema_version: 1
+id: qwen3-coder-next
+display_name: Qwen3-Coder-Next (80B-A3B)
+description: Non-thinking, text-only coding MoE. Intel AutoRound INT4; dual-3090 fit and performance unvalidated.
+family: qwen3-next-moe
+# Intel checkpoint config.json at the revision below: 48 layers, counted
+# layer_types = 36 linear_attention + 12 full_attention. Not 48 KV-growing layers.
+hidden_size: 2048
+num_hidden_layers: 48
+num_gdn_layers: 36
+num_attn_layers: 12
+num_attn_heads: 16
+num_kv_heads: 2
+head_dim_attn: 256
+linear_num_v_heads: 32
+linear_num_k_heads: 16
+linear_v_head_dim: 128
+linear_k_head_dim: 128
+linear_conv_kernel_dim: 4
+max_ctx_supported: 262144
+attention_k_eq_v: false
+num_experts: 512
+num_experts_per_tok: 10
+moe_intermediate_size: 512
+shared_expert_intermediate_size: 512
+active_params_b: 3.0
+mtp_num_hidden_layers: 0
+attn_output_gate: true
+vision_capable: false
+requires_genesis: false
+# Architecture-based projection only: no measured calibration anchors yet.
+kv_calc_supported: true
+valid_tp: [1, 2]
+compatible_drafters: []
+default_weight_variant: autoround-int4
+weights:
+  autoround-int4:
+    path: qwen3-coder-next-autoround-int4
+    local_subdir: qwen3-coder-next-autoround-int4
+    # HF API sum of safetensors files: 43,518,774,888 bytes (40.53 GiB).
+    # Disk footprint is NOT a measurement of runtime VRAM.
+    size_gb: 43.52
+    format: autoround
+    status: experimental
+    hf_repo: Intel/Qwen3-Coder-Next-int4-AutoRound
+    revision: 79c8a6bb73b7946095d7ece1f8fc68535f7c9ab8
+    files: ["*.safetensors", "*.json", "*.jinja", "merges.txt"]
+    engine: vllm
+    kind: main
+    verify_glob: "*.safetensors"
+    manual_note: "INT4 symmetric group-size 128, GPTQ packing from AutoRound. Stock vLLM serving documented by Intel; TP=2 on 24 GiB cards remains unvalidated. Non-thinking model: no reasoning parser, no speculative decoding. Full-machine time-sliced workload; no coexistence claim."

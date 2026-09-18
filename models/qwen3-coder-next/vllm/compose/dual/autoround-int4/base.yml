@@ -1,0 +1,108 @@
+# ===========================================================================
+# Profile (at-a-glance):
+#   Model:     Qwen3-Coder-Next 80B-A3B (Intel AutoRound INT4)
+#   Topology:  Dual 24 GiB GPUs (TP=2; NVLink auto-detected)
+#   Drafter:   none
+#   KV:        bf16 (engine default with bfloat16 weights/activations)
+#   Vision:    no
+#   Max ctx:   16384 initially; architecture supports 262144
+#   Genesis:   none
+#   Status:    🐣 Incubating
+#   Caveats:   Unbooted; dual-3090 fit, tool quality and throughput unvalidated.
+#   Best for:  Initial all-GPU coding-agent evaluation, not production
+# ---------------------------------------------------------------------------
+# Only variant for this model: base.yml = TP=2, BF16 KV, no drafter/offload.
+# Source: https://huggingface.co/Intel/Qwen3-Coder-Next-int4-AutoRound
+# Card: https://huggingface.co/Qwen/Qwen3-Coder-Next
+# Weights alone are ~40.53 GiB across both cards. Runtime buffers, replicated
+# tensors and KV need additional VRAM: this is a fit experiment, NOT a fit claim.
+# Start at 16K / one sequence / 2048-token prefill chunks. CUDA graphs remain
+# enabled; diagnose actual boot memory before changing execution mode.
+# Non-thinking model: no reasoning parser/effort switch or enable_thinking knob.
+# Use the checkpoint's own chat template. Official sampler: 1.0 / .95 / top-k 40.
+# No MTP, DFlash, W4A8 patches, CPU offload, or cross-model template reuse.
+# Time-slice with the existing server; launch/switch may stop managed services.
+# No benchmark or quality claims until the actual compose is validated.
+# ===========================================================================
+# Requires-min-vram-gb: 24
+# Engine-profile: vllm-stable
+# Requires-min-gpu-count: 2
+# Tensor-parallel: 2
+# Requires-sm: 8.0+
+services:
+  vllm-qwen3-coder-next-dual:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.29.0}
+    container_name: "${ESTATE_CONTAINER:-vllm-qwen3-coder-next-dual}"
+    user: "0:${DOCKER_GID:-1000}"
+    restart: ${CLUB3090_RESTART:-unless-stopped}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${ESTATE_PORT:-${PORT:-8180}}:8000"
+    volumes:
+      - ${MODEL_DIR:-../../../../../../models-cache}:/root/.cache/huggingface
+      - ../../../cache/torch_compile:/root/.cache/vllm/torch_compile_cache
+      - ../../../cache/triton:/root/.triton/cache
+      - ../../../../../../scripts/detect_nvlink.sh:/etc/club3090/detect_nvlink.sh:ro
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${ESTATE_GPUS:-${NVIDIA_VISIBLE_DEVICES:-all}}
+      - CUDA_VISIBLE_DEVICES
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-${OFFLINE:-0}}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-${OFFLINE:-0}}
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - NVLINK_MODE=${NVLINK_MODE:-auto}
+      - DISABLE_CUSTOM_ALL_REDUCE=${DISABLE_CUSTOM_ALL_REDUCE:-0}
+      - VLLM_SKIP_P2P_CHECK
+      - VLLM_NO_USAGE_STATS=1
+      - OMP_NUM_THREADS=1
+    shm_size: "16gb"
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        source /etc/club3090/detect_nvlink.sh
+        if [ "$${_CUSTOM_AR_ENABLED:-$${_NVLINK_ENABLED:-0}}" = "1" ]; then
+          exec vllm serve "$$@"
+        else
+          exec vllm serve --disable-custom-all-reduce "$$@"
+        fi
+      - --
+    command:
+      - --model
+      - /root/.cache/huggingface/qwen3-coder-next-autoround-int4
+      - --served-model-name
+      - qwen3-coder-next
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --quantization
+      - auto_round
+      - --dtype
+      - bfloat16
+      - --tensor-parallel-size
+      - "${TP:-2}"
+      - --max-model-len
+      - "${MAX_MODEL_LEN:-16384}"
+      - --gpu-memory-utilization
+      - "${GPU_MEMORY_UTILIZATION:-0.95}"
+      - --max-num-seqs
+      - "${MAX_NUM_SEQS:-1}"
+      - --max-num-batched-tokens
+      - "${MAX_NUM_BATCHED_TOKENS:-2048}"
+      - --kv-cache-dtype
+      - auto
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - qwen3_coder
+      - --enable-prefix-caching
+      - --enable-chunked-prefill
+      - --override-generation-config
+      - '{"temperature":${TEMP:-${TEMPERATURE:-1.0}},"top_p":${TOP_P:-0.95},"top_k":${TOP_K:-40},"min_p":${MIN_P:-0.0},"presence_penalty":${PRESENCE_PENALTY:-0.0},"repetition_penalty":${REPEAT_PENALTY:-1.0}}'
