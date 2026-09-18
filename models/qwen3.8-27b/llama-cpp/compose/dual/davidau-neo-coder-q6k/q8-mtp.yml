@@ -35,9 +35,9 @@
 # mmap stays enabled. Run as a time-sliced workload, not alongside Flash-Next
 # or the resident vLLM 27B. Normal switch/launch tears down managed services.
 #
-# Embedded template + --jinja handles tools. Default: thinking ON, effort low;
+# Embedded template + --jinja handles tools. Default: thinking ON, effort xhigh;
 # INSTRUCT=1 switches reasoning OFF and the sampler together. Publisher rows:
-# thinking 1.0/0.95/20/0.0, presence 0; instruct 0.7/0.8/20/0.0, presence 1.5.
+# precise coding 0.6/0.95/20/0.0, presence 0; instruct 0.7/0.8/20/0.0, presence 1.5.
 # Repeat penalty is 1.0. Explicit request sampler fields override defaults.
 # REASONING_EFFORT supports low/medium/xhigh. Test both modes independently.
 # SPEC_N sets draft depth; SPEC_N=0 or SPEC=off removes draft flags for an A/B.
@@ -71,7 +71,7 @@ services:
       - TEMPERATURE
       - TOP_P
       - PRESENCE_PENALTY
-      - LLAMA_ARG_CHAT_TEMPLATE_KWARGS=${LLAMA_ARG_CHAT_TEMPLATE_KWARGS:-{"reasoning_effort":"${REASONING_EFFORT:-low}"}}
+      - LLAMA_ARG_CHAT_TEMPLATE_KWARGS=${LLAMA_ARG_CHAT_TEMPLATE_KWARGS:-{"reasoning_effort":"${REASONING_EFFORT:-xhigh}"}}
       - CUDA_VISIBLE_DEVICES=${ESTATE_GPUS:-${CUDA_VISIBLE_DEVICES:-0,1}}
     entrypoint:
       - /bin/bash
@@ -82,7 +82,7 @@ services:
           _p="$${TOP_P:-0.80}";    _pp="$${PRESENCE_PENALTY:-1.5}"
           echo "[sampler] INSTRUCT row: reasoning=$$_r temp=$$_t top_p=$$_p presence=$$_pp" >&2
         else
-          _r="$${REASONING:-on}";  _t="$${TEMP:-$${TEMPERATURE:-1.0}}"
+          _r="$${REASONING:-on}";  _t="$${TEMP:-$${TEMPERATURE:-0.6}}"
           _p="$${TOP_P:-0.95}";    _pp="$${PRESENCE_PENALTY:-0.0}"
           echo "[sampler] THINKING row (default): reasoning=$$_r temp=$$_t top_p=$$_p presence=$$_pp" >&2
         fi
