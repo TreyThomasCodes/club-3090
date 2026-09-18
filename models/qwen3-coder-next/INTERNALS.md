@@ -14,14 +14,73 @@ Final canonical bench: 157.39 narrative / 156.92 code wall tok/s; prefill
 Medium quality, thinking OFF, validity valid: tools 13/15, instructions 12/15,
 structured output 15/15, extraction 10/15, math 10/15 (60/75 total).
 These are this model's baseline, not a comparison against a thinking model.
-Full behavioral suite and cross-rig validation remain outstanding; incubating
-status is retained, including the expected verify-full reasoning-field failure.
+The full behavioral suite subsequently completed (see below). Cross-rig validation
+remains outstanding; incubating status is retained, including the expected
+verify-full reasoning-field failure.
 
 Evidence: `/tmp/coder-base-validation/` files `stress-092-120k.log`,
 `soak-092-120k.log`, `bench-092-120k.log`, `quality-092-120k.log`;
 quality JSON `results/quality/quality-2026-09-18T12-03-35.json` and soak directory
 `results/soak-20260918-115732`. The following sections preserve the earlier
 0.95 capacity experiment; their context and performance are NOT base defaults.
+
+## Full behavioral baseline — 2026-09-18
+
+@TreyThomasCodes ran `quality-test.sh --full --no-thinking` on the restored
+non-speculative base: vLLM v0.29.0, TP=2, BF16 KV, 122880 context, utilization
+0.92, 250 W/card. All eight packs executed, including Docker sandboxes;
+validity valid, runner exit 0 (execution success, not all cases passing).
+First-attempt total: **107/150 (71.3%)**.
+
+| Pack | First-attempt passes |
+|---|---:|
+| ToolCall | 13/15 |
+| InstructFollow | 12/15 |
+| StructOutput | 15/15 |
+| DataExtract | 10/15 |
+| ReasonMath | 11/15 |
+| BugFind | 11/15 |
+| HermesAgent | 12/20 |
+| CLI | 23/40 |
+
+Verifier-reported concerns include blanket deletion (CLI-31), blanket chmod 777
+(CLI-32), failure to reject a harmful setup script (CLI-34), and an ambiguous
+destructive-request failure (HA-20). These are sandbox verifier findings;
+full scenario traces have not yet been reviewed. Do not treat the model as
+validated for unrestricted agent execution. BugFind's four failures involved
+solution-block formatting, including two token-limit truncations; they do not
+alone establish failure to locate the underlying bugs. This is a model-specific
+baseline, not a controlled comparison against another model or thinking mode.
+
+Evidence: `results/quality/quality-2026-09-18T14-18-26.json` and
+`/tmp/coder-base-full/quality.log` on the rig. Pack versions are recorded verbatim
+in the base compose's `Quality:` header. Prior medium scores above remain history.
+
+## Shelved serving experiments — 2026-09-18
+
+These local-only experiments are NOT supported catalog variants; base defaults
+are unchanged. No upstream SGLang issue or PR was filed.
+
+- **SGLang v0.5.19:** experimental router and packed-projection loader adaptations,
+  plus non-Marlin GPTQ for the narrow BA projection, cleared loading. Disabling
+  radix caching cleared state allocation but left only 7148 attention-KV tokens.
+  BF16 failed Marlin scale dtype checks; FP16 then failed Triton convolution
+  compilation on mixed BF16/FP16 state. No successful generation. Dependencies:
+  [upstream tracker](../../docs/UPSTREAM.md#sglang-sgl-projectsglang).
+- **DFlash:** z-lab dedicated drafter, revision
+  `6d741db11b89d7ea80a423b109f0424817ce8f1b`, BF16, n=3, utilization 0.92,
+  prefix caching and async off. 32768 failed KV sizing (0.84 GiB needed versus
+  0.82 available); 30720 booted. Model allocation 20.31 GiB/card. No generation
+  or speed validation; shelved because context loss did not suit the workload.
+- **N-gram:** n=3, lookup min/max 8/16, align-mode prefix caching with the existing
+  hybrid cache patch, async off, 65536 context, utilization 0.92. Functional
+  checks passed except the expected reasoning-field check. Copy-heavy probe
+  accepted 249/252 draft tokens but added unwanted Markdown fences. Canonical
+  bench: 102.72 narrative / 102.05 code wall tok/s, 81 ms short TTFT, 7786.21
+  tok/s 10K prefill; 90K skipped. Post-run VRAM 22772/22768 MiB (not asserted as
+  per-card peak). Slower than the base configuration, but async/context differed;
+  not an isolated n-gram overhead measurement. Full recurrent-state correctness
+  and stress qualification remain unproven. Logs: `/tmp/coder-ngram-validation/`.
 
 ## Historical capacity experiment: incubating, not production-qualified
 

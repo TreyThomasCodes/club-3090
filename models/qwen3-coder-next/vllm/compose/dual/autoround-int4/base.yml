@@ -9,7 +9,7 @@
 #   Genesis:   none
 #   Status:    🐣 Incubating
 #   Caveats:   Requires router patch; verify-full reasoning check inapplicable (non-thinking); single-rig validation. See ../../../../INTERNALS.md.
-#   Quality:   toolcall-15 13/15 (87%) · instructfollow-15 12/15 (80%) · structoutput-15 15/15 (100%) · dataextract-15 10/15 (67%) · reasonmath-15 10/15 (67%) (--medium, thinking OFF, validity=valid, packs tc1.0.1·if1.0.0·so1.1.0·de1.2.0·rm1.0.0, 2026-09-18)
+#   Quality:   toolcall-15 13/15 (87%) · instructfollow-15 12/15 (80%) · structoutput-15 15/15 (100%) · dataextract-15 10/15 (67%) · reasonmath-15 11/15 (73%) · bugfind-15 11/15 (73%) · hermesagent-20 12/20 (60%) · cli-40 23/40 (57%) (--full, thinking OFF, validity=valid, packs tc1.0.1·if1.0.0·so1.1.0·de1.2.0·rm1.0.0·bf1.0.1·hm1.0.0·cli1.0.2, 2026-09-18)
 #   Best for:  Initial all-GPU coding-agent evaluation, not production
 # ---------------------------------------------------------------------------
 # Only variant for this model: base.yml = TP=2, BF16 KV, no drafter/offload.

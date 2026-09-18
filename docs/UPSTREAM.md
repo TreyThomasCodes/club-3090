@@ -282,6 +282,12 @@ Re-benched 2026-04-30 PM on Qwen3.6-27B Q4_K_M + matched z-lab/Qwen3.6-27B-DFlas
 
 ## SGLang (`sgl-project/sglang`)
 
+Coder-Next AutoRound experiment: [PR #29318](https://github.com/sgl-project/sglang/pull/29318)
+(open, unmerged when checked 2026-09-18) addresses the missing `.weight` in the
+packed GDN loader. Our v0.5.19 trial reproduces this error. The experimental
+local adaptation also installs the loader on GPTQ qweight/scales/qzeros/g_idx;
+end-to-end correctness is not yet established. No new upstream issue filed.
+
 | Issue / PR | Status | Why it matters | Workaround |
 |---|---|---|---|
 | **Same Marlin pad-sub-tile-n bug as vllm#40361** | 🔴 Not filed; same kernel-line fix applies | Blocks Lorbus INT4 + EAGLE on SGLang. We haven't filed an SGLang PR. | None on SGLang. Use vLLM (with our patched fork) or wait for SGLang to pick up the upstream Marlin fix. |

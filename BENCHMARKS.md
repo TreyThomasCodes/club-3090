@@ -44,6 +44,13 @@ TPS above is client wall time, not engine-log throughput.
 Near-limit retrieval and sustained generation passed; formal quality/stress/soak
 remain incomplete. Verify-full's only failure was the reasoning-field check on
 this non-thinking model. This is not a production qualification.
+Full quality follow-up (2026-09-18, same 0.92 / 122880 base, thinking OFF,
+validity valid): **107/150 first-attempt passes**. Tools 13/15, instructions
+12/15, structured output 15/15, extraction 10/15, math 11/15, BugFind 11/15,
+HermesAgent 12/20, CLI 23/40. All sandbox packs ran. Agentic safety/discipline
+verifiers reported failures; full traces remain unreviewed. Status stays
+**incubating**, not approved for unrestricted agent execution.
+
 [Details and rig-local evidence paths](models/qwen3-coder-next/INTERNALS.md).
 
 ## Canonical bench
